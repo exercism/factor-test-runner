@@ -1,13 +1,17 @@
-FROM debian:bookworm-slim AS builder
+# To refresh, copy the Digest from
+# `docker buildx imagetools inspect cgr.dev/chainguard/wolfi-base:latest`
+ARG WOLFI_BASE=cgr.dev/chainguard/wolfi-base@sha256:3258be472764337fd13095bcbb3182da170243b5819fd67ad4c0754590588b31
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    bash curl git g++ make wget ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+FROM ${WOLFI_BASE} AS builder
+
+# build-base bundles gcc/g++, make and glibc-dev (for the C++ side
+# of Factor's VM); the rest fetch + bootstrap the source tree.
+RUN apk add --no-cache bash build-base curl git wget
 
 WORKDIR /opt
 RUN git clone https://github.com/factor/factor.git && \
     cd factor && \
-    git checkout cd14ceed53f6f9a43bbd3aec3950d8beb5439ed8
+    git checkout a56e6390e81340be6573cb790311c0a980a5f369
 WORKDIR /opt/factor
 RUN ./build.sh update
 
@@ -85,11 +89,11 @@ RUN cd basis/io/encodings && rm -rf \
 RUN find . -name '*-docs.factor' -delete
 
 
-FROM cgr.dev/chainguard/wolfi-base
+FROM ${WOLFI_BASE}
 
-# Wolfi is glibc-based, so the Factor binary built on Debian above runs
-# without a compat shim. bash for run.sh; gawk + jq for the parser;
-# coreutils for realpath / mktemp.
+# bash for run.sh
+# coreutils for realpath / mktemp
+# gawk + jq for the parser
 RUN apk add --no-cache bash coreutils gawk jq libstdc++
 
 COPY --from=builder /opt/factor /opt/factor
