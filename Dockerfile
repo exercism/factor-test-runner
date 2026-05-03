@@ -8,10 +8,13 @@ FROM ${WOLFI_BASE} AS builder
 # of Factor's VM); the rest fetch + bootstrap the source tree.
 RUN apk add --no-cache bash build-base curl git wget
 
+# Factor 0.101
+ARG FACTOR_COMMIT="a56e6390e81340be6573cb790311c0a980a5f369"
+
 WORKDIR /opt
 RUN git clone https://github.com/factor/factor.git && \
     cd factor && \
-    git checkout a56e6390e81340be6573cb790311c0a980a5f369
+    git checkout ${FACTOR_COMMIT}
 WORKDIR /opt/factor
 RUN ./build.sh update
 

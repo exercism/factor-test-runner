@@ -28,37 +28,37 @@ fi
 slug="$1"
 solution_dir=$(realpath "${2%/}")
 output_dir=$(realpath "${3%/}")
-mkdir -p "$output_dir"
+mkdir -p "${output_dir}"
 results_file="${output_dir}/results.json"
 canonical_root="/opt/test-runner/tests/${slug}"
 test_file="${solution_dir}/${slug}/${slug}-tests.factor"
 
 echo "${slug}: testing..."
 
-if [[ ! -f "$test_file" ]]; then
+if [[ ! -f "${test_file}" ]]; then
     jq -n --arg msg "test file not found: ${slug}-tests.factor" \
-        '{version: 3, status: "error", message: $msg}' >"$results_file"
+        '{version: 3, status: "error", message: $msg}' > "${results_file}"
     exit 0
 fi
 
 # Copy the fixture to a fresh temp dir so the rewrite below does not mutate
 # the source.
 tmp_dir=$(mktemp -d -t "factor-runner-${slug}-XXXXX")
-trap 'rm -rf "$tmp_dir"' EXIT
-cp -r "${solution_dir}/." "$tmp_dir"
+trap 'rm -rf "${tmp_dir}"' EXIT
+cp -r "${solution_dir}/." "${tmp_dir}"
 stripped_tests="${tmp_dir}/${slug}/${slug}-tests.factor"
-awk '!/^STOP-HERE$/' "$stripped_tests" > "${stripped_tests}.new"
-mv "${stripped_tests}.new" "$stripped_tests"
+awk '!/^STOP-HERE$/' "${stripped_tests}" > "${stripped_tests}.new"
+mv "${stripped_tests}.new" "${stripped_tests}"
 
 # Run Factor; capture combined stdout/stderr.
 set +e
-raw_output=$(cd "$tmp_dir" && factor -roots=. -run=exercism-tools "$slug" 2>&1)
+raw_output=$(cd "${tmp_dir}" && factor -roots=. -run=exercism-tools "${slug}" 2>&1)
 set -e
 # Normalize the tmp path to the canonical Docker path.
-raw_output=${raw_output//$tmp_dir/$canonical_root}
+raw_output=${raw_output//${tmp_dir}/${canonical_root}}
 
 # Awk parser shared by all stages: JSON-escape a single string field.
-read -r -d '' AWK_JSON <<'AWK' || true
+read -r -d '' awk_json << 'AWK' || true
 function json_str(s,    r) {
     r = s
     gsub(/\\/, "\\\\", r)
@@ -75,7 +75,7 @@ AWK
 # 1. Extract source-test records (one JSON object per line, NDJSON):
 #    {"line_no":N,"task_id":N|null,"test_code":"..."}
 #    Reads the post-strip file so line numbers match what Factor reports.
-src_tests=$(awk "$AWK_JSON"'
+src_tests=$(awk "${awk_json}"'
     BEGIN { task = "null" }
     /^[[:space:]]*TASK:[[:space:]]+[0-9]+/ {
         match($0, /TASK:[[:space:]]+[0-9]+/)
@@ -95,19 +95,21 @@ src_tests=$(awk "$AWK_JSON"'
 # 2. Parse Factor stdout into NDJSON segments and failures:
 #    segments: {"type":"segment","idx":N,"failed":bool,"output":"..."}
 #    failures: {"type":"failure","line_no":N,"message":"..."}
-parsed=$(printf '%s\n' "$raw_output" | awk "$AWK_JSON"'
+parsed=$(printf '%s\n' "${raw_output}" | awk "${awk_json}"'
     function close_segment(   out, i) {
         if (idx == 0) return
         out = ""
         for (i = 1; i <= seg_n; i++) out = out (i > 1 ? "\n" : "") seg[i]
-        sub(/^\n+/, "", out); sub(/\n+$/, "", out)
+        sub(/^\n+/, "", out)
+        sub(/\n+$/, "", out)
         printf "{\"type\":\"segment\",\"idx\":%d,\"failed\":%s,\"output\":%s}\n",
             idx, (seg_failed ? "true" : "false"), json_str(out)
     }
     function close_failure(   body, i) {
         body = ""
         for (i = 1; i <= fail_n; i++) body = body (i > 1 ? "\n" : "") fail[i]
-        sub(/^\n+/, "", body); sub(/\n+$/, "", body)
+        sub(/^\n+/, "", body)
+        sub(/\n+$/, "", body)
         printf "{\"type\":\"failure\",\"line_no\":%d,\"message\":%s}\n",
             fail_line, json_str(body)
     }
@@ -122,55 +124,84 @@ parsed=$(printf '%s\n' "$raw_output" | awk "$AWK_JSON"'
     #   must-infer           → "Must Infer:"
     #   must-infer-as        → "Must Infer As:"
     BEGIN {
-        state = "inline"; idx = 0
+        state = "inline"
+        idx = 0
         header_re = "^(Unit Test|Unit Test~|Unit Test V~|Long Unit Test|Must Fail|Must Fail With|Must Not Fail|Must Infer|Must Infer As): "
     }
     state == "inline" && $0 ~ header_re {
         close_segment()
-        idx++; seg_failed = 0; seg_n = 0; delete seg
+        idx++
+        seg_failed = 0
+        seg_n = 0
+        delete seg
         next
     }
     state == "inline" && $0 == "###FAIL_BEGIN###" {
-        close_segment(); idx = 0
-        state = "fail_loc"; next
+        close_segment()
+        idx = 0
+        state = "fail_loc"
+        next
     }
     state == "inline" && $0 == "--> test failed!" {
-        seg_failed = 1; next
+        seg_failed = 1
+        next
     }
     state == "inline" {
-        if (idx > 0) { seg_n++; seg[seg_n] = $0 }
+        if (idx > 0) {
+            seg_n++
+            seg[seg_n] = $0
+        }
         next
     }
     state == "fail_loc" {
         if (match($0, /:[[:space:]]*[0-9]+[[:space:]]*$/)) {
-            n = substr($0, RSTART, RLENGTH); gsub(/[^0-9]/, "", n)
+            n = substr($0, RSTART, RLENGTH)
+            gsub(/[^0-9]/, "", n)
             fail_line = n + 0
-        } else { fail_line = 0 }
-        fail_n = 0; delete fail
-        state = "fail_body"; next
+        } else {
+            fail_line = 0
+        }
+        fail_n = 0
+        delete fail
+        state = "fail_body"
+        next
     }
     state == "fail_body" && $0 == "###FAIL_END###" {
         close_failure()
-        state = "fail_between"; next
+        state = "fail_between"
+        next
     }
     state == "fail_body" {
-        fail_n++; fail[fail_n] = $0; next
+        fail_n++
+        fail[fail_n] = $0
+        next
     }
     state == "fail_between" && $0 == "###FAIL_BEGIN###" {
-        state = "fail_loc"; next
+        state = "fail_loc"
+        next
     }
     END { close_segment() }
 ')
 
-segments=$(printf '%s\n' "$parsed" | awk '/"type":"segment"/' || true)
-failures=$(printf '%s\n' "$parsed" | awk '/"type":"failure"/' || true)
+segments=$(printf '%s\n' "${parsed}" | awk '/"type":"segment"/' || true)
+failures=$(printf '%s\n' "${parsed}" | awk '/"type":"failure"/' || true)
 
 # 3. If no segments emitted, surface a top-level error from the raw output.
-if [[ -z "$segments" ]]; then
-    cleaned=$(printf '%s\n' "$raw_output" | awk '/^\([UO]\) /{exit} {print}' \
-        | awk 'NF { print; blank = 0; next } !blank { print; blank = 1 }')
-    if [[ -z "$cleaned" ]]; then cleaned="No tests were executed"; fi
-    jq -n --arg msg "$cleaned" '{version:3, status:"error", message:$msg}' >"$results_file"
+if [[ -z "${segments}" ]]; then
+    cleaned=$(printf '%s\n' "${raw_output}" | awk '/^\([UO]\) /{exit} {print}' \
+        | awk '
+            NF {
+                print
+                blank = 0
+                next
+            }
+            !blank {
+                print
+                blank = 1
+            }
+        ')
+    [[ -z "${cleaned}" ]] && cleaned="No tests were executed"
+    jq -n --arg msg "${cleaned}" '{version:3, status:"error", message:$msg}' > "${results_file}"
     exit 0
 fi
 
@@ -178,9 +209,9 @@ fi
 #    --slurpfile would require files; instead pass NDJSON via --argjson after
 #    converting each line. We use jq -s on a pipeline of NDJSON inputs.
 jq -n \
-    --argjson srcs   "$(printf '%s\n' "$src_tests"  | jq -s '.')" \
-    --argjson segs   "$(printf '%s\n' "$segments"   | jq -s '.')" \
-    --argjson fails  "$(printf '%s\n' "$failures"   | jq -s '.')" \
+    --argjson srcs   "$(printf '%s\n' "${src_tests}"  | jq -s '.')" \
+    --argjson segs   "$(printf '%s\n' "${segments}"   | jq -s '.')" \
+    --argjson fails  "$(printf '%s\n' "${failures}"   | jq -s '.')" \
     '
     ($fails | map({(.line_no|tostring): .message}) | add // {}) as $fail_by_line
     | $segs | sort_by(.idx)
@@ -209,6 +240,6 @@ jq -n \
       )
     | (if all(.status == "pass") then "pass" else "fail" end) as $top
     | {version: 3, status: $top, tests: .}
-    ' >"$results_file"
+    ' > "${results_file}"
 
 echo "${slug}: done"
