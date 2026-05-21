@@ -6,7 +6,12 @@ FROM ${WOLFI_BASE} AS builder
 
 # build-base bundles gcc/g++, make and glibc-dev (for the C++ side
 # of Factor's VM); the rest fetch + bootstrap the source tree.
-RUN apk add --no-cache bash build-base curl git wget
+# gcc / libstdc++-dev are held at the last 15.x release: Wolfi's gcc 16
+# package omits the libgcc_s_asneeded linker script that GCC's driver still
+# passes as -lgcc_s_asneeded, and a gcc-15 / libstdc++-16 mix can't find
+# <algorithm> because the headers live under /usr/include/c++/16.
+RUN apk add --no-cache bash build-base curl git wget \
+    gcc=15.2.0-r11 libstdc++-dev=15.2.0-r11
 
 # Factor 0.101
 ARG FACTOR_COMMIT="a56e6390e81340be6573cb790311c0a980a5f369"
