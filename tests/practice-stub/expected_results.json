@@ -3,13 +3,13 @@
   "status": "fail",
   "tests": [
     {
-      "name": "Test 1",
+      "name": "greet returns hello",
       "status": "error",
       "test_code": "{ \"hello\" } [ greet ] unit-test",
       "message": "unimplemented"
     },
     {
-      "name": "Test 2",
+      "name": "greet returns world",
       "status": "error",
       "test_code": "{ \"world\" } [ greet ] unit-test",
       "message": "unimplemented"
