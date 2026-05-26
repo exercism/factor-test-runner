@@ -93,7 +93,7 @@ src_tests=$(awk "${awk_json}"'
 ' "${tmp_dir}/${slug}/${slug}-tests.factor")
 
 # 2. Parse Factor stdout into NDJSON segments and failures:
-#    segments: {"type":"segment","idx":N,"failed":bool,"output":"..."}
+#    segments: {"type":"segment","idx":N,"failed":bool,"name":"...","output":"..."}
 #    failures: {"type":"failure","line_no":N,"message":"..."}
 parsed=$(printf '%s\n' "${raw_output}" | awk "${awk_json}"'
     function close_segment(   out, i) {
@@ -102,8 +102,8 @@ parsed=$(printf '%s\n' "${raw_output}" | awk "${awk_json}"'
         for (i = 1; i <= seg_n; i++) out = out (i > 1 ? "\n" : "") seg[i]
         sub(/^\n+/, "", out)
         sub(/\n+$/, "", out)
-        printf "{\"type\":\"segment\",\"idx\":%d,\"failed\":%s,\"output\":%s}\n",
-            idx, (seg_failed ? "true" : "false"), json_str(out)
+        printf "{\"type\":\"segment\",\"idx\":%d,\"failed\":%s,\"name\":%s,\"output\":%s}\n",
+            idx, (seg_failed ? "true" : "false"), json_str(cur_name), json_str(out)
     }
     function close_failure(   body, i) {
         body = ""
@@ -126,6 +126,9 @@ parsed=$(printf '%s\n' "${raw_output}" | awk "${awk_json}"'
     BEGIN {
         state = "inline"
         idx = 0
+        pending_name = ""
+        cur_name = ""
+        desc_re = "^###DESC### "
         header_re = "^(Unit Test|Unit Test~|Unit Test V~|Long Unit Test|Must Fail|Must Fail With|Must Not Fail|Must Infer|Must Infer As): "
     }
     state == "inline" && $0 ~ header_re {
@@ -134,6 +137,18 @@ parsed=$(printf '%s\n' "${raw_output}" | awk "${awk_json}"'
         seg_failed = 0
         seg_n = 0
         delete seg
+        cur_name = pending_name
+        pending_name = ""
+        next
+    }
+    # A generated "###DESC### <description>" line labels the test that
+    # follows it (it is printed before that test'"'"'s "Unit Test:" header).
+    # Stash it as the upcoming segment'"'"'s name; never add it to any
+    # segment'"'"'s output. Concept exercises emit no such lines.
+    state == "inline" && $0 ~ desc_re {
+        line = $0
+        sub(desc_re, "", line)
+        pending_name = line
         next
     }
     state == "inline" && $0 == "###FAIL_BEGIN###" {
@@ -188,7 +203,7 @@ failures=$(printf '%s\n' "${parsed}" | awk '/"type":"failure"/' || true)
 
 # 3. If no segments emitted, surface a top-level error from the raw output.
 if [[ -z "${segments}" ]]; then
-    cleaned=$(printf '%s\n' "${raw_output}" | awk '/^\([UO]\) /{exit} {print}' \
+    cleaned=$(printf '%s\n' "${raw_output}" | awk '/^\([UO]\) /{exit} !/^###DESC### /{print}' \
         | awk '
             NF {
                 print
@@ -229,8 +244,10 @@ jq -n \
                 else "fail" end
             else "pass" end
           ) as $status
+        | ($seg.name // "") as $label
         | {
-            name: ("Test " + ((.key + 1) | tostring)),
+            name: (if ($label | length) > 0 then $label
+                   else ("Test " + ((.key + 1) | tostring)) end),
             status: $status,
             test_code: ($src.test_code // ""),
           }
