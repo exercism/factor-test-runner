@@ -75,20 +75,57 @@ AWK
 # 1. Extract source-test records (one JSON object per line, NDJSON):
 #    {"line_no":N,"task_id":N|null,"test_code":"..."}
 #    Reads the post-strip file so line numbers match what Factor reports.
+#    A test runs from its first code line through the line that ends in a
+#    test word (e.g. `unit-test`); accumulate the whole span so `test_code`
+#    holds the full multi-line source, not just the closing `] unit-test`.
+#    `line_no` stays the closing line, matching what Factor reports for
+#    failures. Blank, comment, and TASK lines reset the buffer so they are
+#    never folded into the next test.
 src_tests=$(awk "${awk_json}"'
-    BEGIN { task = "null" }
+    function reset() {
+        n = 0
+        delete buf
+    }
+    function flush(   i, code) {
+        code = ""
+        for (i = 1; i <= n; i++) code = code (i > 1 ? "\n" : "") buf[i]
+        printf "{\"line_no\":%d,\"task_id\":%s,\"test_code\":%s}\n", NR, task, json_str(code)
+        reset()
+    }
+    BEGIN {
+        task = "null"
+        n = 0
+    }
     /^[[:space:]]*TASK:[[:space:]]+[0-9]+/ {
         match($0, /TASK:[[:space:]]+[0-9]+/)
         s = substr($0, RSTART, RLENGTH)
         sub(/^TASK:[[:space:]]+/, "", s)
         task = s
+        reset()
         next
     }
-    /(unit-test|unit-test~|unit-test-v~|long-unit-test|must-fail-with|must-fail|must-not-fail|must-infer|must-infer-as)[[:space:]]*$/ {
+    /^[[:space:]]*$/ {
+        reset()
+        next
+    }
+    /^[[:space:]]*!/ {
+        reset()
+        next
+    }
+    # A `"label" description` line names the test that follows; it is its own
+    # statement, not part of the test form, so treat it as a boundary.
+    /^[[:space:]]*"[^"]*"[[:space:]]+description[[:space:]]*$/ {
+        reset()
+        next
+    }
+    {
         line = $0
-        sub(/^[[:space:]]+/, "", line)
         sub(/[[:space:]]+$/, "", line)
-        printf "{\"line_no\":%d,\"task_id\":%s,\"test_code\":%s}\n", NR, task, json_str(line)
+        n++
+        buf[n] = line
+    }
+    /(unit-test|unit-test~|unit-test-v~|long-unit-test|must-fail-with|must-fail|must-not-fail|must-infer|must-infer-as)[[:space:]]*$/ {
+        flush()
     }
 ' "${tmp_dir}/${slug}/${slug}-tests.factor")
 
@@ -139,6 +176,17 @@ parsed=$(printf '%s\n' "${raw_output}" | awk "${awk_json}"'
         delete seg
         cur_name = pending_name
         pending_name = ""
+        # Factor pretty-prints a long test form across lines: the header
+        # line is just "Unit Test: {" and the form body follows, indented,
+        # up to a closing "}" at column 0. Those continuation lines are an
+        # echo of the test, not program output, so skip them.
+        rest = $0
+        sub(header_re, "", rest)
+        if (rest == "{") state = "header_cont"
+        next
+    }
+    state == "header_cont" {
+        if ($0 ~ /^}[[:space:]]*$/) state = "inline"
         next
     }
     # A generated "###DESC### <description>" line labels the test that
