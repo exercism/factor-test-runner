@@ -93,6 +93,14 @@ RUN cd basis/io/encodings && rm -rf \
 # at least basis/binary-search at runtime.
 RUN find . -name '*-docs.factor' -delete
 
+# Drop the Unicode source data tables. These are parsed only during bootstrap to
+# build the unicode tables that are baked into factor.image; they are not read at
+# runtime.
+RUN rm -f basis/unicode/UnicodeData.txt \
+    basis/unicode/allkeys.txt
+
+RUN strip factor
+
 
 FROM ${WOLFI_BASE}
 
