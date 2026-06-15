@@ -4,6 +4,10 @@
 .gitattributes
 .gitignore
 Dockerfile
+README.md
+CODE_OF_CONDUCT.md
+bin/benchmark.sh
+bin/benchmark-in-docker.sh
 bin/run-in-docker.sh
 bin/run-tests-in-docker.sh
 bin/run-tests.sh
