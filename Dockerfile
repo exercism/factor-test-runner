@@ -29,8 +29,16 @@ RUN git apply /tmp/shuffle-drop-help.patch
 ARG FACTOR_EXCLUDE="ui ui.tools help handbook tools"
 RUN sed -i 's#-i="\$BOOT_IMAGE"#-i="$BOOT_IMAGE" -exclude="'"${FACTOR_EXCLUDE}"'"#' build.sh
 
-# build the pinned commit with no git pull.
-RUN ./build.sh net-bootstrap
+# Compile the VM for the pinned commit, then bootstrap it with the 0.101 boot
+# image from the release source zip.
+ARG FACTOR_SRC_URL="https://github.com/factor/factor/releases/download/0.101/factor-src-0.101.zip"
+ARG FACTOR_SRC_SHA256="b88ba4df4f7166dfac57b594cdafeda5e25103a0a75c06a32f5e57e92eafb456"
+RUN ./build.sh compile && \
+    wget -q -O /tmp/factor-src.zip "${FACTOR_SRC_URL}" && \
+    echo "${FACTOR_SRC_SHA256}  /tmp/factor-src.zip" | sha256sum -c - && \
+    unzip -p /tmp/factor-src.zip factor/boot.unix-x86.64.image > boot.unix-x86.64.image && \
+    rm /tmp/factor-src.zip && \
+    ./build.sh bootstrap
 
 # Precompile tools.test AND the common exercise vocabs into factor.image, then re-save it.
 RUN ./factor -e='USING: accessors arrays ascii assocs bit-arrays calendar calendar.english circular combinators combinators.short-circuit command-line concurrency.combinators concurrency.locks continuations debugger deques destructors disjoint-sets dlists formatting fry generic grouping hash-sets hashtables heaps infix inspector io io.encodings.utf8 io.files io.streams.string kernel lexer locals macros make math math.bitwise math.combinatorics math.constants math.functions math.order math.parser math.primes math.statistics namespaces pair-rocket prettyprint.config quotations qw random random.mersenne-twister ranges regexp sequences sequences.repeating sets sorting source-files.errors.debugger splitting splitting.monotonic strings system tools.test tr typed unicode vectors vocabs vocabs.loader memory ; save'
