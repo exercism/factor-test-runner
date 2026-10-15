@@ -10,8 +10,8 @@ FROM ${WOLFI_BASE} AS builder
 RUN apk add --no-cache bash build-base curl git wget \
     gcc=15.2.0-r11 libstdc++-dev=15.2.0-r11
 
-# Factor 0.101
-ARG FACTOR_COMMIT="a56e6390e81340be6573cb790311c0a980a5f369"
+# Factor 0.102
+ARG FACTOR_COMMIT="6f604bb0fa28362bb2f20ddb133bc73b19b6a50f"
 
 WORKDIR /opt
 RUN git clone https://github.com/factor/factor.git && \
@@ -19,20 +19,16 @@ RUN git clone https://github.com/factor/factor.git && \
     git checkout ${FACTOR_COMMIT}
 WORKDIR /opt/factor
 
-# Patch extra/shuffle to drop the dependency on help / help.markup (for $shuffle docs)
-COPY patches/shuffle-drop-help.patch /tmp/shuffle-drop-help.patch
-RUN git apply /tmp/shuffle-drop-help.patch
-
 # Bootstrap a headless image: drop the GUI (ui, ui.tools), the in-image help
 # system (help, handbook), and the dev-tools component (tools) from the bootstrap
 # component set.
 ARG FACTOR_EXCLUDE="ui ui.tools help handbook tools"
-RUN sed -i 's#-i="\$BOOT_IMAGE"#-i="$BOOT_IMAGE" -exclude="'"${FACTOR_EXCLUDE}"'"#' build.sh
+RUN sed -i 's#-i="\$PWD/\$BOOT_IMAGE"#& -exclude="'"${FACTOR_EXCLUDE}"'"#' build.sh
 
-# Compile the VM for the pinned commit, then bootstrap it with the 0.101 boot
+# Compile the VM for the pinned commit, then bootstrap it with the 0.102 boot
 # image from the release source zip.
-ARG FACTOR_SRC_URL="https://github.com/factor/factor/releases/download/0.101/factor-src-0.101.zip"
-ARG FACTOR_SRC_SHA256="b88ba4df4f7166dfac57b594cdafeda5e25103a0a75c06a32f5e57e92eafb456"
+ARG FACTOR_SRC_URL="https://github.com/factor/factor/releases/download/0.102/factor-src-0.102.zip"
+ARG FACTOR_SRC_SHA256="6d00ebabdb185a40a252510bcded331a05b9e8330c5dc90a181a6355a32e3ab5"
 RUN ./build.sh compile && \
     wget -q -O /tmp/factor-src.zip "${FACTOR_SRC_URL}" && \
     echo "${FACTOR_SRC_SHA256}  /tmp/factor-src.zip" | sha256sum -c - && \
