@@ -5,7 +5,8 @@
     {
       "name": "greet returns hello",
       "status": "pass",
-      "test_code": "{ \"hello\" } [ \"calling greet\" print greet ] unit-test"
+      "test_code": "{ \"hello\" } [ \"calling greet\" print greet ] unit-test",
+      "output": "calling greet"
     }
   ]
 }
