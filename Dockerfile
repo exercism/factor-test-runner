@@ -39,14 +39,21 @@ RUN ./build.sh compile && \
 # Precompile tools.test AND the common exercise vocabs into factor.image, then re-save it.
 RUN ./factor -e='USING: accessors arrays ascii assocs bit-arrays calendar calendar.english circular combinators combinators.short-circuit command-line concurrency.combinators concurrency.locks continuations debugger deques destructors disjoint-sets dlists formatting fry generic grouping hash-sets hashtables heaps infix inspector io io.encodings.utf8 io.files io.streams.string kernel lexer locals macros make math math.bitwise math.combinatorics math.constants math.functions math.order math.parser math.primes math.statistics namespaces pair-rocket prettyprint.config quotations qw random random.mersenne-twister ranges regexp sequences sequences.repeating sets sorting source-files.errors.debugger splitting splitting.monotonic strings system tools.test tr typed unicode vectors vocabs vocabs.loader memory ; save'
 
+# Also precompile the library vocabs a solution might use that the step above
+# does not load. Without this, a run compiles each one it needs from source:
+# sequences.extras alone takes about 3.5 s, and with math.matrices 5.5 s.
+# Once they are in the image, `require` finds them already loaded and returns
+# at once. This adds about 5 MB to factor.image.
+RUN ./factor -e='USING: assocs.extras calendar.format calendar.parser combinators.short-circuit.smart english interpolate inverse io.encodings.latin1 io.encodings.strict io.encodings.string io.encodings.utf16 lazy lcs lists lists.lazy math.floating-point math.hashcodes math.matrices math.polynomials math.primes.erato.fast math.primes.factors math.primes.lucas-lehmer math.primes.pollard-rho-brent math.primes.safe math.quaternions sequences.complex sequences.cords sequences.extras sequences.merged sequences.unrolled sequences.windowed shuffle sorting.human sorting.specification sorting.title memory ; save'
+
 # Remove files not needed at runtime
 RUN rm -rf .git build vm src misc Factor.app \
     factor.image.fresh boot.*.image libfactor.a libfactor-ffi-test.so \
     GNUmakefile Nmakefile LICENSE.txt README.md \
     build.sh build.cmd unmaintained
 
-# Keep only the extra/ source needed to compile sequences.extras and
-# assocs.extras on demand: those two plus extra/shuffle.
+# Keep only the extra/ source for sequences.extras and assocs.extras (both
+# precompiled above): those two plus extra/shuffle.
 RUN find extra -mindepth 1 -maxdepth 1 \
     ! -name sequences ! -name assocs ! -name shuffle \
     -exec rm -rf {} + && \
@@ -60,8 +67,8 @@ RUN find extra -mindepth 1 -maxdepth 1 \
 # precompiled into factor.image at the step above, so deleting their source
 # here is safe — they load from the image. interpolate, search-deques,
 # lcs, lists and lazy are deliberately absent: no exemplar needs them, but a
-# fluent solver might reach for them, and their source (~20 KB, no extra deps)
-# is kept so it compiles on demand at runtime.
+# fluent solver might reach for them, so their source (~20 KB, no extra deps)
+# is kept and they are precompiled above.
 
 # GUI and graphics
 RUN cd basis && rm -rf \
